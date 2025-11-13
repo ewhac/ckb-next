@@ -30,7 +30,7 @@
 
 add_custom_target(animations)
 
-foreach (animation IN ITEMS GRADIENT HEAT PINWHEEL RAIN RANDOM RIPPLE WAVE INVADERS LIFE SNAKE PIPE)
+foreach (animation IN ITEMS GRADIENT HEAT PINWHEEL RAIN RANDOM RIPPLE WAVE INVADERS LIFE SNAKE PIPE PLASMA)
   if (WITH_${animation})
     string(TOLOWER ${animation} animation)
     add_executable(${animation} ${animation}/main.c)
