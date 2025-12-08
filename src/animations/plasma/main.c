@@ -17,7 +17,7 @@
  * more details.
  *
  * You should have received a copy of the GNU General Public License along with
- * this program. If not, see <https://www.gnu.org/licenses/>. 
+ * this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include <bits/types/struct_timeval.h>
 #include <ckb-next/animation.h>
@@ -179,10 +179,6 @@ ckb_start (ckb_runctx *context, int state)
         g_long = context->height;
         g_short = g_long - (context->height - context->width) * 0.75f;
     }
-#if 0
-    fprintf (stderr, "c_wide, c_high: %d, %d\n", context->width, context->height);
-    fprintf (stderr, "g_wide, g_high, a_r: %f, %f, %f\n", g_wide, g_high, g_aspect_ratio);
-#endif
 
     /*
      * Initialize angles and velocities.
@@ -230,18 +226,6 @@ ckb_start (ckb_runctx *context, int state)
 
         HASH_ADD_PTR (plasmadots, key, pd);
     }
-
-#if 0
-    fprintf (stderr, "X: %f - %f\n",
-             (0.0 * g_wide)             / (float) context->height - (g_wide / 2.0),
-             (context->height * g_wide) / (float) context->height - (g_wide / 2.0));
-    //fprintf (stderr, "Y: %f - %f\n",
-    //         (0.0 * g_high)             / ((float) context->height / g_aspect_ratio - 1.0) - (g_high / 2.0),
-    //         (context->width * g_high)  / ((float) context->height / g_aspect_ratio - 1.0) - (g_high / 2.0));
-    fprintf (stderr, "Y: %f - %f\n",
-             (0.0 * g_high)             / ((float) context->width) - (g_high / 2.0),
-             (context->width * g_high)  / ((float) context->width) - (g_high / 2.0));
-#endif
 }
 
 
@@ -341,12 +325,6 @@ ckb_frame (ckb_runctx *context)
             pd->b = b - maxdiff;
 
         ckb_alpha_blend (key, 255, fabstrunc (pd->r) * 255, fabstrunc (pd->g) * 255, fabstrunc (pd->b) * 255);
-#if 0
-        if (!strcmp (key->name, "g1")  ||  !strcmp (key->name, "g16")  ||  !strcmp (key->name, "numstar")  ||  !strcmp (key->name, "numdot"))
-        {
-            fprintf (stderr, "%7s.{x,y:r,g,b} = %10.6f (%4d), %10.6f (%4d) : %10.6f %10.6f %10.6f\n", key->name, pd->x, key->y, pd->y, key->x, pd->r, pd->g, pd->b);
-        }
-#endif
     }
     return 0;
 }
