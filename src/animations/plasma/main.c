@@ -158,13 +158,18 @@ ckb_start (ckb_runctx *context, int state)
     float               *pda;
     int                 i;
 
-    if (!state) {
-        /*  TODO: Erase the hashmap here?  */
-        return;
+    if (plasmadots) {
+        /*  Always clear this; we rebuild it from scratch.  */
+        HASH_CLEAR (hh, plasmadots);
     }
 
-    if (plasmadots) {
-        HASH_CLEAR (hh, plasmadots);
+    if (!state) {
+        /*  Deactivate plugin.  */
+        if (dotmem) {
+            free (dotmem);
+            dotmem = NULL;
+        }
+        return;
     }
 
     g_aspect_ratio = (float) context->width / (float) context->height;
