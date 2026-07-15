@@ -20,7 +20,7 @@
  * this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include <ckb-next/animation.h>
-#include <sys/time.h>
+#include <time.h>
 
 #include "uthash.h"
 
@@ -32,8 +32,6 @@
 #define NUMCONSTS       (3 * 6)
 
 #define COUNT_OF(ary)   (sizeof (ary) / sizeof (0[ary]))
-
-#define fabstrunc(v)    (v <= 0  ?  (v >= -1.0 ? -v : 1.0)  :  (v <= 1.0 ? v : 1.0))
 
 
 /**************************************************************************
@@ -51,18 +49,18 @@ struct plasmadot {
 /**************************************************************************
  * Globals.
  */
-double  g_zoom;
-double  g_focus;
-double  g_speed;
+double  zoom;
+double  sharpness;
+double  speed;
 
 //  "Plasma" coordinate space.
-float   g_wide, g_high;
-float   g_long, g_short;
-float   g_aspect_ratio;
+float   wide, high;
+float   longer, shorter;
+float   aspect_ratio;
 
-float   s[NUMCONSTS];   // sines
-float   a[NUMCONSTS];   // angles: 0 <= a <= TWO_PI
-float   da[NUMCONSTS];  // delta angles
+float   sine[NUMCONSTS];    // sines
+float   ang[NUMCONSTS];     // angles: 0 <= a <= TWO_PI
+float   d_ang[NUMCONSTS];   // delta angles
 
 
 /*
@@ -79,6 +77,16 @@ struct plasmadot    *dotmem;
 /**************************************************************************
  * Code.
  */
+/**
+ * Returns abs(val) clamped to range [0.0, max].
+ */
+static double
+fabsclamp (double val, double max)
+{
+    val = fabs (val);
+    return val > max ? max : val;
+}
+
 void
 ckb_info (void)
 {
@@ -91,20 +99,20 @@ ckb_info (void)
     CKB_DESCRIPTION ("A flowing plasma effect.");
 
     // Effect parameters
-    CKB_PARAM_DOUBLE ("zoom", "Zoom factor into plasma field:", "", 20.0, 0.1, 50.0);
-    CKB_PARAM_DOUBLE ("focus", "Focus -- \"sharpness\" of plasma edges:", "", 1, 0.5, 50);
+    CKB_PARAM_DOUBLE ("zoom", "Zoom factor into plasma field:", "", 10.0, 0.1, 50.0);
+    CKB_PARAM_DOUBLE ("sharpness", "\"Sharpness\" of plasma edges:", "", 1, 0.5, 50);
     CKB_PARAM_DOUBLE ("speed", "Animation speed:", "", 10.0, 0.1, 50);
 
     // Timing/input parameters
     CKB_KPMODE (CKB_KP_NONE);
     CKB_TIMEMODE (CKB_TIME_DURATION);
-    CKB_LIVEPARAMS (TRUE);	// FIXME:?
+    CKB_LIVEPARAMS (TRUE);
     CKB_REPEAT (FALSE);
 
     // Presets
     CKB_PRESET_START ("Gentle Swirls");
     CKB_PRESET_PARAM ("zoom", "20.0");
-    CKB_PRESET_PARAM ("focus", "1");
+    CKB_PRESET_PARAM ("sharpness", "1");
     CKB_PRESET_PARAM ("speed", "10.0");
     CKB_PRESET_END;
 }
@@ -118,11 +126,8 @@ ckb_info (void)
 void
 ckb_init (ckb_runctx *context)
 {
-    struct timeval  now;
-
-    // Randomize.
-    gettimeofday (&now, NULL);
-    srand (now.tv_usec);
+    // Seed RNG.
+    srand (time (NULL));
 }
 
 
@@ -136,9 +141,9 @@ ckb_init (ckb_runctx *context)
 void
 ckb_parameter (ckb_runctx *_context, char const *name, char const *value)
 {
-    CKB_PARSE_DOUBLE ("zoom", &g_zoom){}
-    CKB_PARSE_DOUBLE ("focus", &g_focus){}
-    CKB_PARSE_DOUBLE ("speed", &g_speed){}
+    CKB_PARSE_DOUBLE ("zoom", &zoom){}
+    CKB_PARSE_DOUBLE ("sharpness", &sharpness){}
+    CKB_PARSE_DOUBLE ("speed", &speed){}
 }
 
 
@@ -171,25 +176,25 @@ ckb_start (ckb_runctx *context, int state)
         return;
     }
 
-    g_aspect_ratio = (float) context->width / (float) context->height;
-    if (g_aspect_ratio >= 1.0) {
-        g_wide = 30.0 / g_zoom;
-        g_high = g_wide / g_aspect_ratio;
-        g_long = context->width;
-        g_short = g_long - (context->width - context->height) * 0.75f;
+    aspect_ratio = (float) context->width / (float) context->height;
+    if (aspect_ratio >= 1.0) {
+        wide = 30.0 / zoom;
+        high = wide / aspect_ratio;
+        longer = context->width;
+        shorter = longer - (context->width - context->height) * 0.75f;
     } else {
-        g_high = 30.0 / g_zoom;
-        g_wide = g_high * g_aspect_ratio;
-        g_long = context->height;
-        g_short = g_long - (context->height - context->width) * 0.75f;
+        high = 30.0 / zoom;
+        wide = high * aspect_ratio;
+        longer = context->height;
+        shorter = longer - (context->height - context->width) * 0.75f;
     }
 
     /*
      * Initialize angles and velocities.
      */
-    pa = a;
-    pda = da;
-    i = COUNT_OF (a);
+    pa = ang;
+    pda = d_ang;
+    i = COUNT_OF (ang);
     while (--i >= 0) {
         *pa++ = (float) rand() / (float) RAND_MAX * TWO_PI;
         *pda++ = (float) rand() / (float) RAND_MAX * 0.005;
@@ -212,20 +217,20 @@ ckb_start (ckb_runctx *context, int state)
     {
         pd->key = key;
 
-        pd->r =
-        pd->g =
+        pd->r = 0.0;
+        pd->g = 0.0;
         pd->b = 0.0;
 
         /*
          * Convert from key location space to quasi-plasma coordinate space.
          * Note x and y are transposed.
          */
-        if (g_aspect_ratio >= 1.0) {
-            pd->x = (float) (key->y * g_wide) / g_long - (g_wide / 2.0);
-            pd->y = (float) (key->x * g_high) / g_short - (g_high / 2.0);
+        if (aspect_ratio >= 1.0) {
+            pd->x = (float) (key->y * wide) / longer - (wide / 2.0);
+            pd->y = (float) (key->x * high) / shorter - (high / 2.0);
         } else {
-            pd->x = (float) (key->y * g_wide) / g_short - (g_wide / 2.0);
-            pd->y = (float) (key->x * g_high) / g_long - (g_high / 2.0);
+            pd->x = (float) (key->y * wide) / shorter - (wide / 2.0);
+            pd->y = (float) (key->x * high) / longer - (high / 2.0);
         }
 
         HASH_ADD_PTR (plasmadots, key, pd);
@@ -249,16 +254,15 @@ ckb_keypress (ckb_runctx *context, ckb_key *key, int x, int y, int state)
 void
 ckb_time (ckb_runctx *context, double delta)
 {
-    float   *ps = s;
-    float   *pa = a;
-    float   *pda = da;
+    float *ps = sine;
+    float *pa = ang;
+    float *pda = d_ang;
 
-    for (int i = COUNT_OF (s);  --i >= 0;  ++ps, ++pa, ++pda) {
-        // FIXME: Adjust according to delta.
-        float new_a = *pa + *pda * g_speed + 0.0001;
+    for (int i = COUNT_OF (sine);  --i >= 0;  ++ps, ++pa, ++pda) {
+        float new_a = *pa + *pda * speed + 0.0001;
         if (new_a >= TWO_PI)
             new_a -= TWO_PI;
-        *ps = sin (new_a) * g_focus;
+        *ps = sin (new_a) * sharpness;
         *pa = new_a;
     }
 }
@@ -271,7 +275,7 @@ ckb_time (ckb_runctx *context, double delta)
 int
 ckb_frame (ckb_runctx *context)
 {
-    const float         maxdiff = 0.004f * (float) g_speed;
+    const float         maxdiff = 0.004f * (float) speed;
     struct plasmadot    *pd;
     ckb_key             *key;
     float               temp;
@@ -283,7 +287,7 @@ ckb_frame (ckb_runctx *context)
     for (key = context->keys, i = context->keycount;  --i >= 0;  ++key) {
         HASH_FIND_PTR (plasmadots, &key, pd);
         if (!pd) {
-            fprintf (stderr, "Key %s not in hashmap.", key->name);
+            DBG ("plasma: Key %s not in hashmap.", key->name);
             continue;
         }
 
@@ -293,24 +297,24 @@ ckb_frame (ckb_runctx *context)
         r = pd->r;
         g = pd->g;
         b = pd->b;
-        pd->r = 0.7f * (  s[ 0] * posx
-                        + s[ 1] * posy
-                        + s[ 2] * (posx * posx + 1.0f)
-                        + s[ 3] * posx * posy
-                        + s[ 4] * g
-                        + s[ 5] * b);
-        pd->g = 0.7f * (  s[ 6] * posx
-                        + s[ 7] * posy
-                        + s[ 8] * posx * posx
-                        + s[ 9] * (posy * posy - 1.0f)
-                        + s[10] * r
-                        + s[11] * b);
-        pd->b = 0.7f * (  s[12] * posx
-                        + s[13] * posy
-                        + s[14] * (1.0f - posx * posy)
-                        + s[15] * posy * posy
-                        + s[16] * r
-                        + s[17] * g);
+        pd->r = 0.7f * (  sine[ 0] * posx
+                        + sine[ 1] * posy
+                        + sine[ 2] * (posx * posx + 1.0f)
+                        + sine[ 3] * posx * posy
+                        + sine[ 4] * g
+                        + sine[ 5] * b);
+        pd->g = 0.7f * (  sine[ 6] * posx
+                        + sine[ 7] * posy
+                        + sine[ 8] * posx * posx
+                        + sine[ 9] * (posy * posy - 1.0f)
+                        + sine[10] * r
+                        + sine[11] * b);
+        pd->b = 0.7f * (  sine[12] * posx
+                        + sine[13] * posy
+                        + sine[14] * (1.0f - posx * posy)
+                        + sine[15] * posy * posy
+                        + sine[16] * r
+                        + sine[17] * g);
 
         temp = pd->r - r;
         if (temp > maxdiff)
@@ -328,7 +332,7 @@ ckb_frame (ckb_runctx *context)
         if (temp < -maxdiff)
             pd->b = b - maxdiff;
 
-        ckb_alpha_blend (key, 255, fabstrunc (pd->r) * 255, fabstrunc (pd->g) * 255, fabstrunc (pd->b) * 255);
+        ckb_alpha_blend (key, 255, fabsclamp (pd->r, 1.0) * 255, fabsclamp (pd->g, 1.0) * 255, fabsclamp (pd->b, 1.0) * 255);
     }
     return 0;
 }
