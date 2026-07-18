@@ -40,6 +40,7 @@ foreach (animation IN ITEMS GRADIENT HEAT PINWHEEL RAIN RANDOM RIPPLE WAVE INVAD
       ${animation}
         PRIVATE
           m
+          ${CMAKE_PROJECT_NAME}::UtHash
           ${CMAKE_PROJECT_NAME}::Animation)
 
     set_target_properties(

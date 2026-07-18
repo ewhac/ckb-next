@@ -31,3 +31,4 @@ endif ()
 
 # ckb-next libraries
 add_subdirectory(ckb-next)
+add_subdirectory(uthash)
