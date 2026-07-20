@@ -25,7 +25,7 @@
 #   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #   POSSIBILITY OF SUCH DAMAGE.
 #
-#   See COPYING regarding the distribution of kissfft library and not this file.
+#   See Copyright notice in include/uthash.h regarding its distribution terms.
 
 project(UtHash VERSION 2.3.0)
 
